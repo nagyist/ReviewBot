@@ -44,7 +44,7 @@ First, make sure you have :command:`java` in your path, or specified in
 .. code-block:: python
 
    exe_paths = {
-       'java': ['/path/to/java'],
+       'java': '/path/to/java',
    }
 
 You'll then need to :ref:`specify the path <worker-configuration-exe-paths>`

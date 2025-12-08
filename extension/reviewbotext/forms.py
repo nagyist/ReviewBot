@@ -1,5 +1,9 @@
 """Forms for Review Bot."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext, gettext_lazy as _
@@ -10,6 +14,9 @@ from reviewboard.reviews.models import StatusUpdate
 
 from reviewbotext.models import Tool
 from reviewbotext.widgets import ToolOptionsWidget
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class ToolForm(forms.ModelForm):
@@ -82,7 +89,11 @@ class ReviewBotConfigForm(IntegrationConfigForm):
                     'resulting page can be very slow in some browsers.'),
         initial=MAX_COMMENTS_DEFAULT)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ) -> None:
         """Initialize the form.
 
         Args:
@@ -92,7 +103,7 @@ class ReviewBotConfigForm(IntegrationConfigForm):
             **kwargs (dict):
                 Keyword arguments for the form.
         """
-        super(ReviewBotConfigForm, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         from reviewbotext.extension import ReviewBotExtension
         extension = ReviewBotExtension.instance
@@ -100,7 +111,7 @@ class ReviewBotConfigForm(IntegrationConfigForm):
         self.css_bundle_names = [extension.get_bundle_id('integration-config')]
         self.js_bundle_names = [extension.get_bundle_id('integration-config')]
 
-    def load(self):
+    def load(self) -> None:
         """Load the form."""
         if 'tool_options' not in self.fields:
             self.fields['tool_options'] = forms.CharField(
@@ -118,9 +129,12 @@ class ReviewBotConfigForm(IntegrationConfigForm):
             self.fields['drop_old_issues'].initial = False
             self.fields['run_manually'].initial = False
 
-        super(ReviewBotConfigForm, self).load()
+        super().load()
 
-    def serialize_tool_field(self, value):
+    def serialize_tool_field(
+        self,
+        value: Tool,
+    ) -> int:
         """Serialize the tool field.
 
         This takes the value from the :py:attr:`tool field <tool>` and
@@ -136,7 +150,10 @@ class ReviewBotConfigForm(IntegrationConfigForm):
         """
         return value.pk
 
-    def deserialize_tool_field(self, value):
+    def deserialize_tool_field(
+        self,
+        value: Sequence[int],
+    ) -> Tool:
         """Deserialize the tool field.
 
         This takes the serialized version (pks) and turns it back into a Tool
@@ -149,6 +166,10 @@ class ReviewBotConfigForm(IntegrationConfigForm):
         Returns:
             reviewbotext.models.Tool:
             The deserialized value.
+
+        Raises:
+            django.core.exceptions.ValidationError:
+                The Tool does not exist.
         """
         try:
             return Tool.objects.get(pk=value)

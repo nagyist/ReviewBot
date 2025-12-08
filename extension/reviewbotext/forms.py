@@ -7,11 +7,10 @@ from typing import TYPE_CHECKING
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext, gettext_lazy as _
-from djblets.forms.fields import ConditionsField
 from reviewboard.integrations.forms import IntegrationConfigForm
-from reviewboard.reviews.conditions import ReviewRequestConditionChoices
 from reviewboard.reviews.models import StatusUpdate
 
+from reviewbotext.compat.conditions import ReviewRequestConditionsField
 from reviewbotext.models import Tool
 from reviewbotext.widgets import ToolOptionsWidget
 
@@ -41,10 +40,7 @@ class ReviewBotConfigForm(IntegrationConfigForm):
     MAX_COMMENTS_DEFAULT = 30
 
     #: When to run this configuration.
-    conditions = ConditionsField(
-        ReviewRequestConditionChoices,
-        label=_('Conditions'),
-        required=False)
+    conditions = ReviewRequestConditionsField(required=False)
 
     #: What to run when this configuration matches.
     tool = forms.ModelChoiceField(

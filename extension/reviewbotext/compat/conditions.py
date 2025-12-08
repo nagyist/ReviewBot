@@ -1,7 +1,7 @@
 """Compatibility imports related to conditions.
 
 Version Added:
-    4.1
+    5.0
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ except ImportError:
             This can be removed once Review Board 7.1 or higher is required.
 
             Version Added:
-                4.1
+                5.0
             """
 
             def __init__(

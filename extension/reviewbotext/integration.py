@@ -1,6 +1,11 @@
+"""The integration for Review Bot"""
+
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
@@ -9,10 +14,20 @@ from reviewboard.admin.server import get_server_url
 from reviewboard.diffviewer.models import DiffSet
 from reviewboard.integrations.base import Integration
 from reviewboard.reviews.models import StatusUpdate
-from reviewboard.reviews.signals import review_request_published
+from reviewboard.reviews.signals import (review_request_published,
+                                         status_update_request_run)
 
 from reviewbotext.forms import ReviewBotConfigForm
 from reviewbotext.models import Tool
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, Mapping
+    from typing import Any
+
+    from django.contrib.auth.models import User
+    from djblets.integrations.models import BaseIntegrationConfig
+    from reviewboard.changedescs.models import ChangeDescription
+    from reviewboard.reviews.models import ReviewRequest
 
 
 class ReviewBotIntegration(Integration):
@@ -26,22 +41,21 @@ class ReviewBotIntegration(Integration):
     description = _('Performs automated analysis and review on code changes.')
     config_form_cls = ReviewBotConfigForm
 
-    def initialize(self):
+    def initialize(self) -> None:
         """Initialize the integration hooks."""
         SignalHook(self, review_request_published,
                    self._on_review_request_published)
-
-        try:
-            from reviewboard.reviews.signals import status_update_request_run
-            SignalHook(self, status_update_request_run,
-                       self._on_status_update_request_run)
-        except ImportError:
-            # Running on Review Board 3.0.18 or older.
-            pass
+        SignalHook(self, status_update_request_run,
+                   self._on_status_update_request_run)
 
     @cached_property
-    def icon_static_urls(self):
-        """The icons used for the integration."""
+    def icon_static_urls(self) -> Mapping[str, str]:
+        """The icons used for the integration.
+
+        Returns:
+            dict:
+            A mapping of the icon static URLs.
+        """
         from reviewbotext.extension import ReviewBotExtension
 
         extension = ReviewBotExtension.instance
@@ -51,14 +65,21 @@ class ReviewBotIntegration(Integration):
             '2x': extension.get_static_url('images/reviewbot@2x.png'),
         }
 
-    def _get_matching_configs(self, review_request, service_id=None):
+    def _get_matching_configs(
+        self,
+        review_request: ReviewRequest,
+        service_id: (str | None) = None,
+    ) -> Iterator[tuple[BaseIntegrationConfig,
+                        Tool,
+                        Mapping[str, Any],
+                        Mapping[str, Any]]]:
         """Return the matching configurations for a review request.
 
         Args:
             review_request (reviewboard.reviews.models.ReviewRequest):
                 The review request to get Review Bot configurations for.
 
-            service_id (unicode, optional):
+            service_id (str, optional):
                 A service ID to filter for.
 
         Yields:
@@ -122,18 +143,29 @@ class ReviewBotIntegration(Integration):
 
             yield config, tool, tool_options, review_settings
 
-    def _on_review_request_published(self, sender, review_request, **kwargs):
+    def _on_review_request_published(
+        self,
+        user: User,
+        review_request: ReviewRequest,
+        changedesc: (ChangeDescription | None) = None,
+        **kwargs,
+    ) -> None:
         """Handle when a review request is published.
 
         Args:
-            sender (object):
-                The sender of the signal.
+            user (django.contrib.auth.models.User):
+                The user who published the review request.
 
-            review_request (reviewboard.reviews.models.ReviewRequest):
-                The review request which was published.
+            review_request (reviewboard.reviews.models.review_request.
+                            ReviewRequest):
+                The review request that was published.
+
+            changedesc (reviewboard.changedescs.models.ChangeDescription,
+                        optional):
+                The change description associated with the publish, if any.
 
             **kwargs (dict):
-                Additional keyword arguments.
+                Ignored keyword arguments from the signal.
         """
         review_request_id = review_request.get_display_id()
         diffset = review_request.get_latest_diffset()
@@ -141,12 +173,10 @@ class ReviewBotIntegration(Integration):
         if not diffset:
             return
 
-        # If this was an update to a review request, make sure that there was a
-        # diff update in it. Otherwise, Review Bot doesn't care, since Review
-        # Bot only deals with diffs.
-        changedesc = kwargs.get('changedesc')
-
         if changedesc is not None:
+            # If this was an update to a review request, make sure that there
+            # was a diff update in it. Otherwise, Review Bot doesn't care,
+            # since Review Bot only deals with diffs.
             fields_changed = changedesc.fields_changed
 
             if ('diff' not in fields_changed or
@@ -216,14 +246,19 @@ class ReviewBotIntegration(Integration):
                     },
                     queue=queue)
 
-    def _drop_old_issues(self, user, service_id, review_request):
+    def _drop_old_issues(
+        self,
+        user: User,
+        service_id: str,
+        review_request: ReviewRequest,
+    ) -> None:
         """Drop old issues associated with the given tool config.
 
         Args:
             user (django.contrib.auth.models.User):
                 The Review Bot user.
 
-            service_id (unicode):
+            service_id (str):
                 The service ID set on the status update objects.
 
             review_request (reviewboard.reviews.models.ReviewRequest):
@@ -241,13 +276,14 @@ class ReviewBotIntegration(Integration):
         for update in status_updates:
             update.drop_open_issues()
 
-    def _on_status_update_request_run(self, sender, status_update, **kwargs):
+    def _on_status_update_request_run(
+        self,
+        status_update: StatusUpdate,
+        **kwargs,
+    ) -> None:
         """Handle a request to run or rerun a tool.
 
         Args:
-            sender (object):
-                The sender of the signal
-
             status_update (reviewboard.reviews.models.StatusUpdate):
                 The status update for the tool that should be run.
 
